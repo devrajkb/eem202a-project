@@ -20,6 +20,7 @@ import imutils
 import time
 import dlib
 import cv2
+import matplotlib.pyplot as plt
 
 # grab the indexes of the facial landmarks for the mouth
 # Note: https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
@@ -34,7 +35,61 @@ detector = dlib.get_frontal_face_detector()
 predictor_file = 'shape_predictor_68_face_landmarks.dat'
 predictor = dlib.shape_predictor(predictor_file)
 
+#10
+FRAME_DURATION_MS = 10 
+
+def visualize(path: str):
+
+    # reading the audio file
+    raw = wave.open(path)
+
+    # reads all the frames
+    # -1 indicates all or max frames
+    signal = raw.readframes(-1)
+    signal = np.frombuffer(signal, dtype ="int16")
+
+    # gets the frame rate
+    f_rate = raw.getframerate()
+
+    # to Plot the x-axis in seconds
+    # you need get the frame rate
+    # and divide by size of your signal
+    # to create a Time Vector
+    # spaced linearly with the size
+    # of the audio file
+    time = np.linspace(
+        0, # start
+        len(signal) / f_rate,
+        num = len(signal)
+    )
+
+    # using matplotlib to plot
+    # creates a new figure
+    plt.figure(1)
+
+    # title of the plot
+    plt.title("Sound Wave")
+
+    # label of x-axis
+    plt.xlabel("Time")
+
+    # actual plotting
+    plt.plot(time, signal)
+
+    # shows the plot
+    # in new window
+    plt.show(block=False)
+
+    # you can also save
+    # the plot using
+    # plt.savefig('filename')
+
 def get_mouth_aspect_ratio(mouth):
+
+
+
+
+
 
     # MAR Equations using three vertical distances
     # compute the euclidean distances between the two sets of
@@ -50,12 +105,16 @@ def get_mouth_aspect_ratio(mouth):
     # compute the mouth aspect ratio
     mar = (A + B + C) / (3.0 * D)
 
+    
+
+
     # return the mouth aspect ratio
     return mar
 
 
 # define one constants, for mouth aspect ratio to indicate open mouth
 # MOUTH_AR_THRESH = 0.55
+
 
 def mouth_aspect_ratio(frame):
     #frame = imutils.resize(frame, width=640)
@@ -90,7 +149,7 @@ def read_wave(path):
         return pcm_data, sample_rate
 
 
-class Frame(object):
+class Frame:
     def __init__(self, bytes, timestamp, duration):
         self.bytes = bytes
         self.timestamp = timestamp
@@ -119,7 +178,7 @@ def vad_classification(sample_rate, frame_duration_ms, vad, a_frames):
         else:
             output_binary_list.append(0)
     return output_binary_list
-
+#UNUSED
 def mouth_aspect_ratio_binary(frame, MOUTH_AR_THRESH):
     mar = mouth_aspect_ratio(frame)
     if mar > MOUTH_AR_THRESH:
@@ -128,59 +187,82 @@ def mouth_aspect_ratio_binary(frame, MOUTH_AR_THRESH):
 
     # Mouth is closed
     return 0
-
 def get_voice_activity(audio, sample_rate, VAD_agg):
     vad = webrtcvad.Vad(VAD_agg)
-    audio_frames = frame_generator(10, audio, sample_rate)
+    audio_frames = frame_generator(FRAME_DURATION_MS, audio, sample_rate)
     audio_frames = list(audio_frames)
-    return vad_classification(sample_rate, 10, vad, audio_frames)
+    return vad_classification(sample_rate, FRAME_DURATION_MS, vad, audio_frames)
 
 def get_gdrive_params():
-    obj = lambda: None
-    lmao = {"auth_host_name": 'localhost', 'noauth_local_webserver': 'store_true', 'auth_host_port': [8080, 8090],
-            'logging_level': 'ERROR'}
-    for k, v in lmao.items():
-        setattr(obj, k, v)
+    return int(3), 0.5
 
-    # authorization boilerplate code
-    SCOPES = 'https://www.googleapis.com/auth/drive.readonly'
-    store = file.Storage('token.json')
-    creds = store.get()
-    # The following will give you a link if token.json does not exist, the link allows the user to give this app permission
-    if not creds or creds.invalid:
-        flow = client.flow_from_clientsecrets('client_id.json', SCOPES)
-        creds = tools.run_flow(flow, store, obj)
 
-    DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))
-    #ID of shareable link
-    #file_id = '1Ht1Q_ZNcg7PXjwovVI-RLt-ZuUSAaW0wmFWS0OKdSgw'
-    file_id = '1-2Cj3U7avgbnsjQEZuDwe8q9wRL4zL3D'
-    request = DRIVE.files().get_media(fileId=file_id)
-    # replace the filename and extension in the first field below
-    fh = io.FileIO('MAR_VAD_params.txt', mode='w')
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while done is False:
-        status, done = downloader.next_chunk()
-        print("Download %d%%." % int(status.progress() * 100))
 
-    params = []
-    with open("MAR_VAD_params.txt", 'r', encoding="utf-8-sig") as f:
-        for line in f:
-            params.append(float(line))
 
-    #params[0] = VAD_agg and params[1] = MOUTH_AR_THRESHOLD
-    return int(params[0]), params[1]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+									
+															 
+									  
+					   
+																														   
+								  
+																	   
+												
+
+																		
+						 
+															 
+												 
+													 
+																 
+												  
+												 
+				
+						
+											  
+															  
+
+			   
+																	
+					  
+									  
+
+														   
+									
 
 
 def extract_video(video_file):
     frames = []
     cap = cv2.VideoCapture(video_file)
     frame_rate = cap.get(cv2.CAP_PROP_FPS)
-    print('The frame rate is {} FPS'.format(frame_rate))
+    print(f'The frame rate is {frame_rate} FPS')
     while cap.isOpened():
         success, frame = cap.read()
-        if success == False:
+        if not success:
             break
 
         frames.append(frame)
@@ -198,67 +280,69 @@ def preprocess_video(frames, num_window_frames):
         features = get_video_features(frame)
         output_list.append(features)
 
+
     # Smooth output
     b, a = signal.bessel(4, 0.2)
     smoothed = signal.filtfilt(b, a, output_list)
 
-    # Normalize output
+    # Normalize output  
     return (smoothed - np.min(smoothed)) / (np.max(smoothed) - np.min(smoothed))
 
 def to_binary(array, threshold):
     # Replaces elements >= threshold with 1 and the rest with 0
-    return np.where(0, 1, array >= threshold)
+    return np.where(array >= threshold, 1, 0)
 
 def extract_audio(video_file, audio_file):
 
     # Pull audio stream from video
-    subprocess.call(['ffmpeg', '-y', '-i', video_file, '-ac', '1', '-ar', '32000', audio_file])
+    subprocess.call(['ffmpeg', '-y', '-i', video_file, '-ac', '1', '-ar', '16000', audio_file])
 
     return read_wave(audio_file)
 
 
 def preprocess_audio(audio, sample_rate, num_video_frames, VAD_agg):
-    # Select feature extraction method
-    get_audio_features = get_voice_activity
+									  
+										   
 
-    # Get audio features
-    output_list = get_audio_features(audio, sample_rate, VAD_agg)
+    # Get audio features						
+    output_list = get_voice_activity(audio, sample_rate, VAD_agg)
 
-    # Resize output to match length of frame list
+    # Resize output to match length of frame list											 
     resampled = signal.resample(output_list, num_video_frames)
 
-    # Smooth output
+	# Smooth output			   
     b, a = signal.bessel(4, 0.2)
     smoothed = signal.filtfilt(b, a, resampled)
 
     # Get rid of overshoots in resampled signal
     output_binary = to_binary(smoothed, 0.5)
 
-    return np.array(output_binary)
+    return np.array(output_binary)											   
 
+								  
 def main(args):
 
-    #Takes path to video file as input
-    #Creates a synced version of the video
+									  
+										  
 
     video_file = args[0]
-    img_rows, img_cols = 32, 32
+							   
     num_window_frames = 30
 
     VAD_agg, MOUTH_AR_THRESHOLD = get_gdrive_params()
-    print(VAD_agg)
-    print(MOUTH_AR_THRESHOLD)
+				  
+    print(VAD_agg, MOUTH_AR_THRESHOLD)
 
-    vlc_input = video_file
-    #quit_vlc = "vlc vlc://quit"
-    quit_vlc = ["pkill", "vlc"]
+						  
+								
+							   
 
-    subprocess.Popen(["vlc", vlc_input])
+										
     start_time = int(round(time.time() * 1000))
 
-    computed_delay = 0
+					  
 
-    #Define file names for processing
+    #Define file names for processing 
     video_dir = os.path.dirname(video_file)
     video_name = os.path.splitext(os.path.basename(video_file))[0]
     audio_file = os.path.join(video_dir, video_name + '.wav')
@@ -268,9 +352,44 @@ def main(args):
     frames, frame_rate = extract_video(video_file)
     audio, sample_rate = extract_audio(video_file, audio_file)
 
-    #Preprocessing/feature extraction phase
+    #Preprocessing/feature extraction phase 
     Xv = preprocess_video(frames, num_window_frames)
     Xa = preprocess_audio(audio, sample_rate, len(frames), VAD_agg)
+    
+    print("len(frames): ", len(frames))
+    
+    # using matplotlib to plot
+    # creates a new figure
+    plt.figure(6)
+
+    # title of the plot
+    plt.title("Xv")
+
+    # label of x-axis
+    plt.xlabel("samples")
+
+    # actual plotting
+    plt.plot(Xv)
+
+    # shows the plot
+    # in new window
+    plt.show(block=False)  
+    # using matplotlib to plot
+    # creates a new figure
+    plt.figure(7)
+
+    # title of the plot
+    plt.title("Xa")
+
+    # label of x-axis
+    plt.xlabel("samples")
+
+    # actual plotting
+    plt.plot(Xa)
+
+    # shows the plot
+    # in new window
+    plt.show(block=False)  
 
     #Correlation to find the time offset
     Xv_np = np.hstack(Xv)
@@ -278,28 +397,51 @@ def main(args):
     corr = np.correlate(Xv_np, Xa_np, mode='same')
     index = np.argmax(corr)
     computed_delay = index - len(Xv_np) // 2
+    print("computed_delay frames: ", computed_delay) 
     computed_delay = 0.040 * computed_delay
+    
+    print("len(Xv_np): ", len(Xv_np))
+    print("len(Xv_np)", len(Xv_np))
+    # using matplotlib to plot
+    # creates a new figure
+    plt.figure(8)
+
+    # title of the plot
+    plt.title("CORR")
+
+    # label of x-axis
+    plt.xlabel("samples")
+
+    # actual plotting
+    plt.plot(corr)
+
+    # shows the plot
+    # in new window
+    plt.show(block=False)  
+	
+    print(index)
     print(computed_delay)
 
-    #Create new corrected video
-    subprocess.call(['ffmpeg', '-i', video_file, '-itsoffset', str(computed_delay), '-i', video_file, '-map', '0:v', '-map', '1:a', '-c', 'copy', output_video])
 
-    #Get time of execution
-    new_start = (int(round(time.time() * 1000)) - start_time)/1000
+    subprocess.call([
+        'ffmpeg', '-y', '-i', video_file,
+        '-itsoffset', str(computed_delay), '-i', video_file,
+        '-map', '0:v', '-map', '1:a', '-c', 'copy', output_video
+    ])
 
+						  
+    elapsed = time.time() - start_time
+    print(f"[INFO] Saved synced video to: {output_video}")
+    print(f"[INFO] Processing took {elapsed:.2f} seconds")
+															
+    visualize(audio_file)										
+													
+								   
 
-    #Quit and restart vlc with synced video at the same spot
-    print(subprocess.check_output(quit_vlc))
-    vlc_new_start = "--start-time=" + str(new_start)
-    vlc_input_synced = output_video
-
-    #TODO: Add vlc_new_start as argument
-    subprocess.Popen(["vlc", vlc_new_start, vlc_input_synced])
+										
+															  
 
 if __name__ == '__main__':
     main(sys.argv[1:])
-
-
-
-
+    input("Press Enter to close graphs and end")
 
