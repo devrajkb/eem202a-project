@@ -288,7 +288,7 @@ def main(argv):
         epilog=textwrap.dedent("""
             Example usage:
               python your_script.py path/to/video.mp4
-              python your_script.py path/to/video.mp4 --vad_agg 2 --mar_thresh 0.45 --show_plots
+              python your_script.py path/to/video.mp4 --vad_agg 2 --mar_thresh 0.45 --num_window_frames 30 --show_plots
 
             VAD Aggressiveness levels:
               0 - Very permissive (detects even soft speech)
@@ -298,6 +298,7 @@ def main(argv):
     parser.add_argument("video_file", type=str, help="Path to the input video file (.mp4 or .avi)")
     parser.add_argument("--vad_agg", type=int, default=3, choices=[0, 1, 2, 3], help="VAD aggressiveness level (0-3), default=3")
     parser.add_argument("--mar_thresh", type=float, default=0.5, help="Mouth Aspect Ratio threshold for open mouth, default=0.5")
+    parser.add_argument("--num_window_frames", type=int, help="Number of frames per segment. If not given, processes all frames at once")
     parser.add_argument("--show_plots", action="store_true", help="Show plots of MAR, VAD, and correlation")
 
     if len(argv) == 0:
@@ -310,75 +311,149 @@ def main(argv):
     VAD_agg = args.vad_agg
     MOUTH_AR_THRESHOLD = args.mar_thresh
     show_plots = args.show_plots
-    num_window_frames = 30
+    num_window_frames = args.num_window_frames
 
     print(f"[INFO] Video File: {video_file}")
     print(f"[INFO] VAD Aggressiveness: {VAD_agg}")
     print(f"[INFO] MAR Threshold: {MOUTH_AR_THRESHOLD}")
+    if num_window_frames:
+        print(f"[INFO] Num Window Frames: {num_window_frames}")
 
     start_time = int(round(time.time() * 1000))
 
-    #Define file names for processing 
     video_dir = os.path.dirname(video_file)
     video_name = os.path.splitext(os.path.basename(video_file))[0]
     audio_file = os.path.join(video_dir, video_name + '.wav')
     output_video = os.path.join(video_dir, video_name + '_synced.mp4')
 
-    #Extract video and audio
     frames, frame_rate = extract_video(video_file)
     audio, sample_rate = extract_audio(video_file, audio_file)
 
-    #Preprocessing/feature extraction phase 
-    Xv = preprocess_video(frames, num_window_frames)
-    Xa = preprocess_audio(audio, sample_rate, len(frames), VAD_agg)
+    offsets_seconds = []
+    offsets_frames = []
+    all_corrs = []
+    all_Xv = []
+    all_Xa = []
 
-    if show_plots:
-        plt.figure(2)
-        plt.title("Xv")
-        plt.xlabel("samples")
-        plt.plot(Xv)
-        plt.show(block=False)  
+    if num_window_frames:
+        num_segments = len(frames) // num_window_frames
+        for i in range(num_segments):
+            start_idx = i * num_window_frames
+            end_idx = start_idx + num_window_frames
 
-        plt.figure(3)
-        plt.title("Xa")
-        plt.xlabel("samples")
-        plt.plot(Xa)
-        plt.show(block=False)  
+            segment_frames = frames[start_idx:end_idx]
+            segment_audio = audio[int(start_idx / frame_rate * sample_rate * 2):int(end_idx / frame_rate * sample_rate * 2)]
 
-    #Correlation to find the time offset
-    Xv_np = np.hstack(Xv)
-    Xa_np = np.hstack(Xa)
-    corr = np.correlate(Xv_np, Xa_np, mode='same')
-    index = np.argmax(corr)
-    computed_delay_frames = index - len(Xv_np) // 2
-    computed_delay = 0.040 * computed_delay_frames
+            if len(segment_frames) < num_window_frames or len(segment_audio) == 0:
+                continue
 
-    if show_plots:
-        plt.figure(4)
-        plt.title(f"CORR: {computed_delay_frames} delays: -ve audio leads, +ve video leads")
-        plt.xlabel("samples")
-        plt.grid(True) 
-        plt.plot(generate_range_by_count(len(corr)), corr)
-        plt.show(block=False)
+            Xv = preprocess_video(segment_frames, num_window_frames)
+            Xa = preprocess_audio(segment_audio, sample_rate, len(segment_frames), VAD_agg)
 
-    print(f"[INFO] Number of frames in video: {len(Xv_np)}")
-    print(f"[INFO] Computed delays : {computed_delay_frames} frames")
-    print(f"[INFO] Computed delays: {computed_delay:.3f} seconds")
+            Xv_np = np.hstack(Xv)
+            Xa_np = np.hstack(Xa)
+            corr = np.correlate(Xv_np, Xa_np, mode='same')
 
-    subprocess.call([
-        'ffmpeg', '-loglevel', 'warning','-y', '-i', video_file,
-        '-itsoffset', str(computed_delay), '-i', video_file,
-        '-map', '0:v', '-map', '1:a', '-c', 'copy', output_video
-    ])
+            index = np.argmax(corr)
+            computed_delay_frames = index - len(Xv_np) // 2
+            computed_delay_seconds = 0.040 * computed_delay_frames
 
-    elapsed = time.time() - (start_time / 1000)
-    print(f"[INFO] Saved synced video to: {output_video}")
-    print(f"[INFO] Processing took {elapsed:.2f} seconds")
+            offsets_frames.append(computed_delay_frames)
+            offsets_seconds.append(computed_delay_seconds)
+            all_corrs.append(corr)
+            all_Xv.append(Xv_np)
+            all_Xa.append(Xa_np)
 
-    if show_plots:
-        visualize(audio_file)
-        input("Press Enter to close graphs and end")
+            print(f"[Segment {i}] Offset: {computed_delay_frames} frames ({computed_delay_seconds:.3f} seconds)")
+    else:
+        Xv = preprocess_video(frames, len(frames))
+        Xa = preprocess_audio(audio, sample_rate, len(frames), VAD_agg)
+
+        Xv_np = np.hstack(Xv)
+        Xa_np = np.hstack(Xa)
+        corr = np.correlate(Xv_np, Xa_np, mode='same')
+
+        index = np.argmax(corr)
+        computed_delay_frames = index - len(Xv_np) // 2
+        computed_delay_seconds = 0.040 * computed_delay_frames
+
+        offsets_frames.append(computed_delay_frames)
+        offsets_seconds.append(computed_delay_seconds)
+        all_corrs.append(corr)
+        all_Xv.append(Xv_np)
+        all_Xa.append(Xa_np)
+
+        print(f"[Full Video] Offset: {computed_delay_frames} frames ({computed_delay_seconds:.3f} seconds)")
+
+    if offsets_seconds:
+        if show_plots:
+            visualize(audio_file)
+
+            plt.figure()
+            plt.plot(np.arange(len(offsets_seconds)), offsets_seconds, marker='o', label='Offset (seconds)')
+            plt.title("Computed Offsets per Segment (Seconds)")
+            plt.xlabel("Segment Index")
+            plt.ylabel("Offset (s)")
+            plt.grid(True)
+            plt.legend()
+            plt.show(block=False)
+
+            plt.figure()
+            plt.plot(np.arange(len(offsets_frames)), offsets_frames, marker='x', color='r', label='Offset (frames)')
+            plt.title("Computed Offsets per Segment (Frames)")
+            plt.xlabel("Segment Index")
+            plt.ylabel("Offset (frames)")
+            plt.grid(True)
+            plt.legend()
+            plt.show(block=False)
+
+            plt.figure()
+            for i, xv in enumerate(all_Xv):
+                plt.plot(xv, label=f"Xv Segment {i}")
+            plt.title("Mouth Aspect Ratio (Xv) per Segment")
+            plt.xlabel("Frame")
+            plt.ylabel("Normalized MAR")
+            plt.grid(True)
+            plt.legend()
+            plt.show(block=False)
+
+            plt.figure()
+            for i, xa in enumerate(all_Xa):
+                plt.plot(xa, label=f"Xa Segment {i}")
+            plt.title("Voice Activity (Xa) per Segment")
+            plt.xlabel("Frame")
+            plt.ylabel("Binary VAD")
+            plt.grid(True)
+            plt.legend()
+            plt.show(block=False)
+
+            plt.figure()
+            for i, c in enumerate(all_corrs):
+                plt.plot(c, label=f"Corr Segment {i}")
+            plt.title("Correlation per Segment")
+            plt.xlabel("Sample Index")
+            plt.ylabel("Correlation")
+            plt.grid(True)
+            plt.legend()
+            plt.show(block=False)
+
+        median_offset = np.median(offsets_seconds)
+        print(f"[INFO] Median computed delay: {median_offset:.3f} seconds")
+
+        subprocess.call([
+            'ffmpeg', '-loglevel', 'warning','-y', '-i', video_file,
+            '-itsoffset', str(median_offset), '-i', video_file,
+            '-map', '0:v', '-map', '1:a', '-c', 'copy', output_video
+        ])
+
+        elapsed = time.time() - (start_time / 1000)
+        print(f"[INFO] Saved synced video to: {output_video}")
+        print(f"[INFO] Processing took {elapsed:.2f} seconds")
+
+        if show_plots:
+            input("Press Enter to close graphs and end")
+    else:
+        print("[WARN] No valid segments found for offset computation.")
 
 if __name__ == '__main__':
     main(sys.argv[1:])
-
