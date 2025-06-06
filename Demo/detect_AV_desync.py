@@ -288,7 +288,7 @@ def main(argv):
         epilog=textwrap.dedent("""
             Example usage:
               python your_script.py path/to/video.mp4
-              python your_script.py path/to/video.mp4 --vad_agg 2 --mar_thresh 0.45
+              python your_script.py path/to/video.mp4 --vad_agg 2 --mar_thresh 0.45 --show_plots
 
             VAD Aggressiveness levels:
               0 - Very permissive (detects even soft speech)
@@ -298,6 +298,7 @@ def main(argv):
     parser.add_argument("video_file", type=str, help="Path to the input video file (.mp4 or .avi)")
     parser.add_argument("--vad_agg", type=int, default=3, choices=[0, 1, 2, 3], help="VAD aggressiveness level (0-3), default=3")
     parser.add_argument("--mar_thresh", type=float, default=0.5, help="Mouth Aspect Ratio threshold for open mouth, default=0.5")
+    parser.add_argument("--show_plots", action="store_true", help="Show plots of MAR, VAD, and correlation")
 
     if len(argv) == 0:
         parser.print_help()
@@ -308,6 +309,7 @@ def main(argv):
     video_file = args.video_file
     VAD_agg = args.vad_agg
     MOUTH_AR_THRESHOLD = args.mar_thresh
+    show_plots = args.show_plots
     num_window_frames = 30
 
     print(f"[INFO] Video File: {video_file}")
@@ -330,18 +332,18 @@ def main(argv):
     Xv = preprocess_video(frames, num_window_frames)
     Xa = preprocess_audio(audio, sample_rate, len(frames), VAD_agg)
 
-    # using matplotlib to plot
-    plt.figure(2)
-    plt.title("Xv")
-    plt.xlabel("samples")
-    plt.plot(Xv)
-    plt.show(block=False)  
+    if show_plots:
+        plt.figure(2)
+        plt.title("Xv")
+        plt.xlabel("samples")
+        plt.plot(Xv)
+        plt.show(block=False)  
 
-    plt.figure(3)
-    plt.title("Xa")
-    plt.xlabel("samples")
-    plt.plot(Xa)
-    plt.show(block=False)  
+        plt.figure(3)
+        plt.title("Xa")
+        plt.xlabel("samples")
+        plt.plot(Xa)
+        plt.show(block=False)  
 
     #Correlation to find the time offset
     Xv_np = np.hstack(Xv)
@@ -351,13 +353,13 @@ def main(argv):
     computed_delay_frames = index - len(Xv_np) // 2
     computed_delay = 0.040 * computed_delay_frames
 
-    plt.figure(4)
-    plt.title(f"CORR: {computed_delay_frames} delays: -ve audio leads, +ve video leads")
-    plt.xlabel("samples")
-    plt.grid(True) 
-    plt.plot(generate_range_by_count(len(corr)), corr)
-    plt.show(block=False)  
-
+    if show_plots:
+        plt.figure(4)
+        plt.title(f"CORR: {computed_delay_frames} delays: -ve audio leads, +ve video leads")
+        plt.xlabel("samples")
+        plt.grid(True) 
+        plt.plot(generate_range_by_count(len(corr)), corr)
+        plt.show(block=False)
 
     print(f"[INFO] Number of frames in video: {len(Xv_np)}")
     print(f"[INFO] Computed delays : {computed_delay_frames} frames")
@@ -373,9 +375,10 @@ def main(argv):
     print(f"[INFO] Saved synced video to: {output_video}")
     print(f"[INFO] Processing took {elapsed:.2f} seconds")
 
-    visualize(audio_file)
+    if show_plots:
+        visualize(audio_file)
+        input("Press Enter to close graphs and end")
 
 if __name__ == '__main__':
     main(sys.argv[1:])
-    input("Press Enter to close graphs and end")
 
