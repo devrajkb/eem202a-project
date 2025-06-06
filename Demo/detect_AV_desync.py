@@ -41,6 +41,54 @@ predictor = dlib.shape_predictor(predictor_file)
 #10
 FRAME_DURATION_MS = 10 
 
+def generate_range_by_count(num_elements):
+  """
+  Generates a list of integers with a specified number of elements,
+  centered around zero (as much as possible).
+
+  This function ensures that the input is a non-negative integer.
+  For example:
+  - If num_elements is 5, it returns [-2, -1, 0, 1, 2]
+  - If num_elements is 4, it returns [-2, -1, 0, 1]
+
+  Args:
+    num_elements: The desired total number of integer elements in the range.
+                  Must be a non-negative integer.
+
+  Returns:
+    A list of integers representing the desired range.
+
+  Raises:
+    ValueError: If num_elements is not an integer or is negative.
+  """
+  # Validate input is an integer
+  if not isinstance(num_elements, int):
+    raise ValueError("The 'num_elements' must be an integer.")
+
+  # Validate input is non-negative
+  if num_elements < 0:
+    raise ValueError("The 'num_elements' cannot be negative.")
+
+  # Handle edge cases for 0 or 1 element
+  if num_elements == 0:
+    return []
+  elif num_elements == 1:
+    return [0]
+
+  # Calculate the starting value to center the range
+  # For N elements, the range will extend approximately N/2 to the left of 0,
+  # and N/2 - 1 (or N/2) to the right, including 0.
+  start_value = -(num_elements // 2) # Integer division
+
+  # Calculate the end value (inclusive)
+  # The last element will be start_value + num_elements - 1
+  end_value_inclusive = start_value + num_elements - 1
+
+  # Use Python's range() function to generate the numbers
+  # range() is exclusive of the stop value, so we add 1 to end_value_inclusive
+  return list(range(start_value, end_value_inclusive + 1))
+  
+
 def visualize(path: str):
 
     # reading the audio file
@@ -214,7 +262,7 @@ def to_binary(array, threshold):
 
 def extract_audio(video_file, audio_file):
     # Pull audio stream from video
-    subprocess.call(['ffmpeg', '-y', '-i', video_file, '-ac', '1', '-ar', '16000', audio_file])
+    subprocess.call(['ffmpeg', '-loglevel', 'warning', '-y', '-i', video_file, '-ac', '1', '-ar', '16000', audio_file])
     return read_wave(audio_file)
 
 def preprocess_audio(audio, sample_rate, num_video_frames, VAD_agg):
@@ -283,13 +331,13 @@ def main(argv):
     Xa = preprocess_audio(audio, sample_rate, len(frames), VAD_agg)
 
     # using matplotlib to plot
-    plt.figure(6)
+    plt.figure(2)
     plt.title("Xv")
     plt.xlabel("samples")
     plt.plot(Xv)
     plt.show(block=False)  
 
-    plt.figure(7)
+    plt.figure(3)
     plt.title("Xa")
     plt.xlabel("samples")
     plt.plot(Xa)
@@ -303,10 +351,11 @@ def main(argv):
     computed_delay_frames = index - len(Xv_np) // 2
     computed_delay = 0.040 * computed_delay_frames
 
-    plt.figure(8)
-    plt.title("CORR")
+    plt.figure(4)
+    plt.title(f"CORR: {computed_delay_frames} delays: -ve audio leads, +ve video leads")
     plt.xlabel("samples")
-    plt.plot(corr)
+    plt.grid(True) 
+    plt.plot(generate_range_by_count(len(corr)), corr)
     plt.show(block=False)  
 
 
@@ -315,7 +364,7 @@ def main(argv):
     print(f"[INFO] Computed delays: {computed_delay:.3f} seconds")
 
     subprocess.call([
-        'ffmpeg', '-y', '-i', video_file,
+        'ffmpeg', '-loglevel', 'warning','-y', '-i', video_file,
         '-itsoffset', str(computed_delay), '-i', video_file,
         '-map', '0:v', '-map', '1:a', '-c', 'copy', output_video
     ])
